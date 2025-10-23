@@ -19,6 +19,7 @@
 
 // DEFINICIONES
 // -----------------------------------------------------------------------------------------------
+#define	VPC1_2MS		65411				//	Valor de precarga para el Timer1 (modo Timer NORMAL free-running) interrup cada 2ms
 #define	TOP				249								//  valor comparacion mi timer 0 para lograr 1ms.
 #define DEBOUNCE_DELAY  10  // Retardo para eliminar el rebote 10 ms
 #define TRANSISTOR_UNIT				  PD5
@@ -44,7 +45,13 @@ volatile uint8_t P2_flag = 0;
 volatile uint8_t DT_flag = 0;
 
 volatile uint8_t P2_debounce = 0; // este flag me permitira saber si tengo que calcular el antirrebote para P2
+volatile uint8_t display_delay_unit = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
+volatile uint8_t display_delay_tens = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
+volatile uint8_t display_delay_hundreds = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
+
 volatile uint8_t timer_P2 = 0; //variable para contabilizar el tiempo de antirrebote de P2
+volatile uint8_t timer_delay_displays = 0; //variable para contabilizar el tiempo de encendido de los displays
+
 
 
 volatile uint8_t last_state_P1 = 0;
@@ -59,7 +66,7 @@ volatile uint8_t hundreds = 0;
 // FUNCIONES
 // -----------------------------------------------------------------------------------------------
 void initialization(){
-  DDRB = 0b001111; //define todos los puertos B (son 6)como salidas
+  DDRB = 0b111111; //define todos los puertos B (son 6)como salidas
   PORTB = 0x00;
 
   DDRD = 0b11110000; //define a los 4 ultimos puertos D como salidas y el resto como entradas
@@ -90,11 +97,49 @@ void startupSequence(){
   _delay_ms(500);
 };
 
-void timers_config(){
+void timer0_config(){
   TCCR0A = 0x02;									// Modo CTC.
 	TCCR0B = 0x03;									// Prescaler N = 64.
 	TIMSK0 = 0x02;									// Habilita interrupcion por comparacion en comparador A.
 	OCR0A = TOP;									 // Carga el valor de TOP con 249. T = (1+OCR0A)*N/16MHz = 1ms => OCR0A = TOPE = 249.
+};
+
+void timer1_config(){
+  // === 1. Configurar Modo y Prescaler ===
+    // WGM1[3:0] = 0000 -> Modo Normal (Overflow de 0x0000 a 0xFFFF)
+    // COM1A[1:0] = 00 -> Pines de comparación desconectados
+    TCCR1A = 0x00; 
+    
+    // CS1[2:0] = 100 -> Prescaler N=256. Inicia TC1.
+    TCCR1B = 0x04; 
+    
+    // === 2. Habilitar Interrupción ===
+    // TOIE1 = 1 -> Habilita la interrupción por desbordamiento del TC1.
+    TIMSK1 = 0x01; 
+    
+    // === 3. Precargar el Contador  ===
+    //  T = (2^(16)- VPC1_2MS)*N/16MHz = 2ms
+    TCNT1 = VPC1_2MS;
+};
+
+void calculate_digits(uint8_t drinks_number){
+  if(drinks_number<10){
+    //solo LSB display
+    unit = drinks_number;
+    display_delay_unit = 1;
+
+  } else if(drinks_number<100){
+    // 2 displays, unidad y decena
+    unit = drinks_number % 10;
+    tens = drinks_number / 10;
+
+
+  } else if (drinks_number<1000){
+    // 3 displays, unidad, decena y centena
+    unit = drinks_number % 10;
+    tens = (drinks_number / 10) % 10;
+    hundreds = (drinks_number / 100) % 10;
+  }
 };
 
 void show_display(){
@@ -104,15 +149,25 @@ void show_display(){
   PORTB = 0b00000001; //para el deco
   PORTD = 0b00000000; //para los transistores de los displays
   _delay_ms(250);
-  if(cont_drinks<10){
+
+
+  /* if(drinks_number<10){
     //solo LSB display
+    unit = drinks_number;
+    display_delay_unit = 1;
 
-  } else if(cont_drinks<100){
+  } else if(drinks_number<100){
     // 2 displays, unidad y decena
+    unit = drinks_number % 10;
+    tens = drinks_number / 10;
 
-  } else if (cont_drinks<1000){
+
+  } else if (drinks_number<1000){
     // 3 displays, unidad, decena y centena
-  }
+    unit = drinks_number % 10;
+    tens = (drinks_number / 10) % 10;
+    hundreds = (drinks_number / 100) % 10;
+  } */
 };
 
 ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (interrumpe cada 1 ms).
@@ -132,7 +187,46 @@ ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (int
 	}
 }
 
-ISR(INT0_vect) {                       //interrupcion externa con INT0
+ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto es c/2ms).
+  TCNT1 = VPC1_2MS; //	Cada vez que interrumpe, precarga el contador del Timer1.
+
+  if(display_delay_unit){				
+		PORTB = unit; // prendo la unidad en el deco
+		sbi(PORTD, TRANSISTOR_UNIT); //activo el transistor unidad
+		timer_delay_displays++;										// contador ++ para tiempo antirrebote
+    if (timer_delay_displays == 5){	// si contador = 5 (5 x 2ms = 10ms)
+		  cbi(PORTD, TRANSISTOR_UNIT); // apago la unidad
+      timer_delay_displays = 0;			//reseteo el tiempo de conteo	
+      display_delay_unit=0; // Ahora al estar en 0 cuando evalue esta variable deberia apagar el display
+    }
+	}
+
+  if(display_delay_tens){		
+    PORTB = tens; // prendo la unidad en el deco
+    sbi(PORTD, TRANSISTOR_TENS); //activo el transistor unidad				
+    timer_delay_displays++;										// contador ++ para tiempo antirrebote
+    if (timer_delay_displays == 5){	// si contador = 5 (5 x 2ms = 10ms)
+      cbi(PORTD, TRANSISTOR_TENS); // apago la unidad
+      timer_delay_displays = 0;				//	Como se alcanz� el tiempo programado, borra el contador del Timer 0.
+      display_delay_tens=0; // Ahora al estar en 0 cuando evalue esta variable deberia apagar el display
+    }
+  }
+
+  if(display_delay_hundreds){	
+    PORTB = hundreds; // prendo la unidad en el deco
+    sbi(PORTD, TRANSISTOR_HUNDREDS); //activo el transistor unidad									
+    timer_delay_displays++;										// contador ++ para tiempo antirrebote
+    if (timer_delay_displays == 5){	// si contador = 5 (5 x 2ms = 10ms)
+      cbi(PORTD, TRANSISTOR_HUNDREDS); // apago la unidad
+      timer_delay_displays = 0;				//	Como se alcanz� el tiempo programado, borra el contador del Timer 0.
+      display_delay_hundreds=0; // Ahora al estar en 0 cuando evalue esta variable deberia apagar el display
+    }
+  }
+    // SECUENCIA TERMINADA !!!!!!1
+}				
+
+// Interrupcion externa para P2
+ISR(INT0_vect) {                       
   // Rutina de interrupción externa INT0 para P2
   //Si el boton 2 no esta presionado entro
   /* show_display(); */
@@ -144,7 +238,7 @@ ISR(INT0_vect) {                       //interrupcion externa con INT0
 }
 
 int main(void){
-  timers_config();
+  timer0_config();
   initialization();
   startupSequence();
   /* sei(); */
@@ -163,6 +257,9 @@ int main(void){
   }else { // restablecer el estado cuando el boton no se esta presionando
       last_state_P1 = 0;  
   }
+
+  show_display(presettable_value);
+
  */
 
   // Bucle Principal - Conteo
@@ -171,6 +268,7 @@ int main(void){
   // Mientras el pulsador_2 no sea pulsado por un tiempo >=5 seg
   while(1){
     while(P2_flag){
+      calculate_digits(0)
       show_display();
     };
   }
