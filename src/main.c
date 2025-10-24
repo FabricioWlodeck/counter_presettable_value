@@ -415,6 +415,8 @@ ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto 
 
 }				
 
+
+
 // Interrupcion externa para P2
 ISR(INT0_vect) {                       
   // Rutina de interrupción externa INT0 para P2
@@ -490,8 +492,8 @@ int main(void){
     cbi(PORTD, TRANSISTOR_HUNDREDS); */
     
 
-    /* while(P2_flag){ //va P2_flag
+    while(P2_flag){ //va P2_flag
       show_display(aux_numer);
-    }; */
+    };
   }
 };
