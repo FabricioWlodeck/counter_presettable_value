@@ -32,11 +32,13 @@
 #define P1_INCREMENT_PRESET   PC0      // pulsador P1, incrementa el valor preseteado
 #define P2_ENTER_RESTART   PD2		            // pulsador P2, da inicio o fin al modo de conteo
 #define DT_DRINK   PC2		      // pulsador DP, incrementa el numero de gaseosas
+#define ALARM_TRANSISTOR   PD4		      // pulsador DP, incrementa el numero de gaseosas
 
 
 // VARIABLES GLOBALES
 // -----------------------------------------------------------------------------------------------
-volatile uint16_t presettable_value = 997;
+volatile uint16_t presettable_value = 0;
+volatile uint16_t DP_value = 0;
 volatile uint16_t cont_drinks = 0;
 
 
@@ -45,6 +47,9 @@ volatile uint8_t P2_flag = 0;
 volatile uint8_t DT_flag = 0;
 
 volatile uint8_t P2_debounce = 0; // este flag me permitira saber si tengo que calcular el antirrebote para P2
+volatile uint8_t P2_off_flag = 0; // flag para saber si apagar a los 5seg
+volatile uint8_t DP_permition = 1; // flag que me permite controlar cuando se puede aumentar las gaseosas con DP
+
 
 // esto por ahora no lo ocupo
 volatile uint8_t display_delay_unit = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
@@ -60,7 +65,10 @@ volatile uint8_t mux_state = 0;
 volatile uint8_t mux_counter = 0;
 
 
-volatile uint8_t timer_P2 = 0; //variable para contabilizar el tiempo de antirrebote de P2
+volatile uint16_t timer_P2_debounce = 0; //variable para contabilizar el tiempo de antirrebote de P2
+volatile uint16_t timer_P2_off = 0; //variable para contabilizar el tiempo para apagar con P2
+
+
 volatile uint8_t timer_delay_displays = 0; //variable para contabilizar el tiempo de encendido de los displays
 volatile uint8_t delay_display_flag = 0; // si tengo que contabilizar delay o no
 
@@ -327,19 +335,37 @@ void show_display(uint8_t drinks_number){
 //Con este TIMER0 CTC manejo P2
 ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (interrumpe cada 1 ms).
 	if(P2_debounce){								// si hubo flanco bajo en P2
-		timer_P2++;										// contador ++ para tiempo antirrebote
-		if (timer_P2 == 10){ 								// si contador = 10 (10ms)
-			if (is_low(PIND, P2_ENTER_RESTART)){ //si esta presionado P2...
-        if(P2_flag){ // si estaba prendido y lo apago reseteo el valor preseteable
-          presettable_value = 0;
-        }
-        P2_flag = !P2_flag;  // togleo flag de estado, ahora dejo en 0 ya que ya efectuo el antirrebote
+		timer_P2_debounce++;										// contador ++ para tiempo antirrebote
+		if (timer_P2_debounce == 10){ 								// si contador = 10 (10ms)
+			if (is_low(PIND, P2_ENTER_RESTART)){ //si esta presionado P2 despues de 10ms...
+        /* P2_flag = !P2_flag; */  // togleo flag de estado, ahora dejo en 0 ya que ya efectuo el antirrebote
+        P2_flag = 1; //lo prendo directamente
       } 
 			P2_debounce = 0;						// reset flag antirebote
-			EIMSK = 0x01;								// vuelvo a habilitar interrupcion INT0
-			timer_P2=0; // vuelvo a dejar en 0 el tiempo de antirrebote para P2
+			EIMSK |= (1 << INT0);								// vuelvo a habilitar "SOLO!!" interrupcion INT0
+			timer_P2_debounce=0; // vuelvo a dejar en 0 el tiempo de antirrebote para P2
 		}
 	}
+  if(P2_off_flag){
+    timer_P2_off++;
+    if (timer_P2_off == 2000){ 								// si contador = 10 (10ms)
+			if (is_low(PIND, P2_ENTER_RESTART)){ //si esta presionado P2 despues de 10ms...
+        if(P2_flag){ // si estaba prendido y lo apago reseteo el valor preseteable
+          P2_flag = 0;
+
+          DP_value = 0;
+          presettable_value = 0;
+          unit=0;
+          tens=0;
+          hundreds=0;
+        }
+        
+      }
+			timer_P2_off = 0;						// reset flag de apagado de P2
+      P2_off_flag = 0; //lo prendo directamente
+
+		}
+  }
 }
 
 //Con este TIMER1 Free-running (NORMAL) manejo multiplexacion de displays
@@ -416,23 +442,20 @@ ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto 
 }				
 
 
-
 // Interrupcion externa para P2
 ISR(INT0_vect) {                       
   // Rutina de interrupción externa INT0 para P2
   //Si el boton 2 no esta presionado entro
   /* show_display(); */
   if(is_low(PIND,P2_ENTER_RESTART)){
-    EIMSK = 0x00;
+    EIMSK &= ~(1 << INT0); //dehabilito SOOOOLO!!!! la interrupcion INT0
     P2_debounce = 1; // Ahora debo realiza el antirebote para P2
-    timer_P2=0;
+    P2_off_flag = 1;
+    timer_P2_debounce=0;
+    timer_P2_off = 0;
+
   }
 }
-
-
-
-
-
 
 int main(void){
   // INICIALIZACION
@@ -442,10 +465,6 @@ int main(void){
   initialization();
   startupSequence();
 
-  
-  
-  
-  calculate_digits(aux_numer);
 
   //BUCLE PRINCIPAL
   //-----------------------------------------------------------------------------------------------
@@ -492,8 +511,33 @@ int main(void){
     cbi(PORTD, TRANSISTOR_HUNDREDS); */
     
 
-    while(P2_flag){ //va P2_flag
-      show_display(aux_numer);
+    while(P2_flag){ // si esta prendido el modo DP o conteo de gaseosas ejecuto esto
+      calculate_digits(DP_value);
+      if(is_low(PINC, DT_DRINK) ){ 
+          _delay_ms(DEBOUNCE_DELAY);  // esperar para evitar el rebote
+          if(is_low(PINC, DT_DRINK) && last_state_DT == 0){ //si sigue abajo despues del delay y su estado anterior fue bajo pongo en alto
+            last_state_DT = 1;
+            DP_value++;
+            calculate_digits(presettable_value);
+
+            // si llega a 1000 que reinicie en 0
+            if(DP_value>=1000){
+              DP_value= 0;
+            }
+          }
+      }else { // restablecer el estado cuando el boton no se esta presionando
+          last_state_DT = 0;  
+      }
+
+      if(DP_value == presettable_value && presettable_value != 0){
+        sbi(PORTD, ALARM_TRANSISTOR);
+        DP_permition = 0;
+        _delay_ms(5000);
+        cbi(PORTD, ALARM_TRANSISTOR);
+        DP_permition= 1;
+        DP_value = 0;
+      }
+
     };
   }
 };
