@@ -36,7 +36,7 @@
 
 // VARIABLES GLOBALES
 // -----------------------------------------------------------------------------------------------
-volatile uint16_t presettable_value = 1;
+volatile uint16_t presettable_value = 997;
 volatile uint16_t cont_drinks = 0;
 
 
@@ -57,6 +57,8 @@ volatile uint8_t show_display_tens = 0;
 volatile uint8_t show_display_hundreds = 0;
 
 volatile uint8_t mux_state = 0;
+volatile uint8_t mux_counter = 0;
+
 
 volatile uint8_t timer_P2 = 0; //variable para contabilizar el tiempo de antirrebote de P2
 volatile uint8_t timer_delay_displays = 0; //variable para contabilizar el tiempo de encendido de los displays
@@ -71,6 +73,7 @@ volatile uint8_t unit = 0;
 volatile uint8_t tens = 0;
 volatile uint8_t hundreds = 0;
 
+volatile uint16_t aux_numer = 536; // aca estoy agregando de forma auxiliar el valor a multiplexar
 
 // FUNCIONES
 // -----------------------------------------------------------------------------------------------
@@ -162,7 +165,6 @@ void calculate_digits(uint16_t drinks_number){
         hundreds = 0;
       }
     }
-  
   }
 };
 
@@ -206,11 +208,92 @@ void show_display(uint8_t drinks_number){
       show_displays = 1;
     }
 
-  } else if(drinks_number<100){
-    // 2 displays, unidad y decena
-    // prendo display unidad y decena
+  } else{
+    if(drinks_number<100){
+      // 2 displays, unidad y decena
+      // prendo display unidad y decena
 
-    //prendo y apagado unidad
+      //prendo y apagado unidad
+      PORTB = unit; 
+      sbi(PORTD, TRANSISTOR_UNIT);
+      delay_display_flag = 1;
+      if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+        cbi(PORTD, TRANSISTOR_UNIT);
+        show_displays = 1;
+      }
+      
+      //prendo y apagado decena
+      PORTB = tens; 
+      sbi(PORTD, TRANSISTOR_TENS);
+      delay_display_flag = 1;
+      if(is_high(PORTD, TRANSISTOR_TENS) && !show_displays){
+        cbi(PORTD, TRANSISTOR_TENS);
+        show_displays = 1;
+      }
+    } else{
+      if (drinks_number<1000){
+        //Prendo 3 displays, unidad, decena y centena
+
+        //prendo y apagado unidad
+        PORTB = unit; 
+        sbi(PORTD, TRANSISTOR_UNIT);
+        delay_display_flag = 1;
+        if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+          cbi(PORTD, TRANSISTOR_UNIT);
+          show_displays = 1;
+        }
+        
+        //prendo y apagado decena
+        PORTB = tens; 
+        sbi(PORTD, TRANSISTOR_TENS);
+        delay_display_flag = 1;
+        if(is_high(PORTD, TRANSISTOR_TENS) && !show_displays){
+          cbi(PORTD, TRANSISTOR_TENS);
+          show_displays = 1;
+        }
+
+        //prendo y apagado centena
+        PORTB = hundreds; 
+        sbi(PORTD, TRANSISTOR_HUNDREDS);
+        delay_display_flag = 1;
+        if(is_high(PORTD, TRANSISTOR_HUNDREDS) && !show_displays){
+          cbi(PORTD, TRANSISTOR_HUNDREDS);
+          show_displays = 1;
+        }
+      }else{
+        PORTD &= (~(0 << TRANSISTOR_UNIT) | ~(0 << TRANSISTOR_TENS) | ~(0 << TRANSISTOR_HUNDREDS)); 
+      }
+    }
+  }
+
+
+  if(drinks_number<10){
+    // solo para display unidad
+
+    // prendo display de unidad
+    PORTB = unit; 
+    sbi(PORTD, TRANSISTOR_UNIT);
+    delay_display_flag = 1;  // veremos si puedo ocupar
+    
+    if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+      cbi(PORTD, TRANSISTOR_UNIT);
+      show_displays = 1;
+    }
+
+  } else{
+    if(drinks_number<100){
+    // Para display unidad y decena
+
+    // prendo display de unidad
+    PORTB = unit; 
+    sbi(PORTD, TRANSISTOR_UNIT);
+    delay_display_flag = 1;  
+    
+    if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+      cbi(PORTD, TRANSISTOR_UNIT);
+      show_displays = 1;
+    }
+
     PORTB = unit; 
     sbi(PORTD, TRANSISTOR_UNIT);
     delay_display_flag = 1;
@@ -227,35 +310,16 @@ void show_display(uint8_t drinks_number){
       cbi(PORTD, TRANSISTOR_TENS);
       show_displays = 1;
     }
+      
+    }else{
+      if (drinks_number<1000){
+      // Para display unidad, decena y centana!!
+        
 
-  } else if (drinks_number<1000){
-    //Prendo 3 displays, unidad, decena y centena
+      }else{
+      // Para en caso de que el valor sea mayor a 1000 y no pueda mostrarlo
 
-    //prendo y apagado unidad
-    PORTB = unit; 
-    sbi(PORTD, TRANSISTOR_UNIT);
-    delay_display_flag = 1;
-    if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
-      cbi(PORTD, TRANSISTOR_UNIT);
-      show_displays = 1;
-    }
-    
-    //prendo y apagado decena
-    PORTB = tens; 
-    sbi(PORTD, TRANSISTOR_TENS);
-    delay_display_flag = 1;
-    if(is_high(PORTD, TRANSISTOR_TENS) && !show_displays){
-      cbi(PORTD, TRANSISTOR_TENS);
-      show_displays = 1;
-    }
-
-    //prendo y apagado centena
-    PORTB = hundreds; 
-    sbi(PORTD, TRANSISTOR_HUNDREDS);
-    delay_display_flag = 1;
-    if(is_high(PORTD, TRANSISTOR_HUNDREDS) && !show_displays){
-      cbi(PORTD, TRANSISTOR_HUNDREDS);
-      show_displays = 1;
+      }
     }
   }
 };
@@ -280,27 +344,74 @@ ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (int
 
 //Con este TIMER1 Free-running (NORMAL) manejo multiplexacion de displays
 ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto es c/2ms).
-  TCNT1 = VPC1_2MS; //	Cada vez que interrumpe, precarga el contador del Timer1.
+  /* TCNT1 = VPC1_2MS; //	Cada vez que interrumpe, precarga el contador del Timer1.
   // PASO 1: Controlar el tiempo de encendido del display actual
-  timer_delay_displays++; 
-  // Solo un display está activo en este momento. Cuando se alcanza el tiempo:
-  if (timer_delay_displays >= 5) { 
-    show_displays = 0;
-    timer_delay_displays = 0;
-    delay_display_flag = 0; // significa que si no tengo que mostrar mas nada ni siquiera se moleste de ir contando cada 2ms
-  }
-
-
-  /* if(delay_display_flag){
-      // PASO 1: Controlar el tiempo de encendido del display actual
+  if(is_high(PORTD, TRANSISTOR_UNIT) || is_high(PORTD, TRANSISTOR_TENS) || is_high(PORTD, TRANSISTOR_HUNDREDS)){
     timer_delay_displays++; 
     // Solo un display está activo en este momento. Cuando se alcanza el tiempo:
-    if (timer_delay_displays >= 5) { 
+    if (timer_delay_displays >= 10 ) { // esto me dara un tiempo de 20ms
       show_displays = 0;
       timer_delay_displays = 0;
       delay_display_flag = 0; // significa que si no tengo que mostrar mas nada ni siquiera se moleste de ir contando cada 2ms
     }
   } */
+
+  TCNT1 = VPC1_2MS; 
+  uint16_t drinks_number =  presettable_value;
+
+  mux_counter++;
+  if (mux_counter >= 20) { //40ms
+    
+      PORTD &= ~(_BV(TRANSISTOR_UNIT) | _BV(TRANSISTOR_TENS) | _BV(TRANSISTOR_HUNDREDS));
+
+      // b) ROTAR ESTADO: 0 -> 1 -> 2 -> 0 ...
+      mux_state++;
+      if (mux_state > 2) {
+          mux_state = 0; // Vuelve a Unidad
+      }
+      
+      //Reiniciar el contador 
+      mux_counter = 0; 
+  }
+
+  // Esto mantiene el display encendido hasta el próximo cambio de estado.
+  
+  switch (mux_state) {
+      case 0: // UNIDAD (LSB)
+          PORTB = unit; 
+
+          sbi(PORTD, TRANSISTOR_UNIT); // Activa el transistor unidad
+          cbi(PORTD, TRANSISTOR_TENS); // desactiva el decena
+          cbi(PORTD, TRANSISTOR_HUNDREDS); // desactiva el centena
+          break;
+      
+      case 1: // DECENA
+          if (drinks_number < 10 ) {
+            cbi(PORTD, TRANSISTOR_UNIT); 
+            cbi(PORTD, TRANSISTOR_TENS); 
+            cbi(PORTD, TRANSISTOR_HUNDREDS); 
+          }else{ // predo solo si hace falta o sea si el numero es mayor o igual a 10
+            PORTB = tens;
+            cbi(PORTD, TRANSISTOR_UNIT); // desactiva el transistor unidad
+            sbi(PORTD, TRANSISTOR_TENS); // Activa el decena
+            cbi(PORTD, TRANSISTOR_HUNDREDS); // desactiva el centena
+          }
+          break;
+      
+      case 2: // CENTENA
+          if (drinks_number < 100) { 
+              cbi(PORTD, TRANSISTOR_UNIT); 
+              cbi(PORTD, TRANSISTOR_TENS); 
+              cbi(PORTD, TRANSISTOR_HUNDREDS); 
+          }else{// predo solo si hace falta o sea si el numero es mayor o igual a 100
+            PORTB = hundreds; 
+            cbi(PORTD, TRANSISTOR_UNIT); // desactiva el transistor unidad
+            cbi(PORTD, TRANSISTOR_TENS); // desactiva el decena
+            sbi(PORTD, TRANSISTOR_HUNDREDS); // Activa el centena
+            
+          }
+          break;
+  }
 
 }				
 
@@ -318,41 +429,51 @@ ISR(INT0_vect) {
 
 
 
-volatile uint16_t aux_numer = 536;
+
 
 
 int main(void){
+  // INICIALIZACION
+  //-----------------------------------------------------------------------------------------------
   timer0_config();
+  timer1_config();
   initialization();
   startupSequence();
-  /* sei(); */
 
-  //  Programacion valor preseteado
-  // -----------------------------------------------------------------------------------------------
-
-  // Boton P1 por pooling/encuesta en la etapa de configuracion
-
-  /* if(is_low(PINC, P1_INCREMENT_PRESET)){ 
-      _delay_ms(DEBOUNCE_DELAY);  // esperar para evitar el rebote
-      if(is_low(PINC, P1_INCREMENT_PRESET) && last_state_P1 == 0){ //si sigue abajo despues del delay y su estado anterior fue bajo pongo en alto
-        last_state_P1 = 1;
-        presettable_value++;
-      }
-  }else { // restablecer el estado cuando el boton no se esta presionando
-      last_state_P1 = 0;  
-  }
-
-  show_display(presettable_value);
-
- */
-
-  // Bucle Principal - Conteo Gaseosas
-  // -----------------------------------------------------------------------------------------------
+  
+  
   
   calculate_digits(aux_numer);
 
-  // Mientras el pulsador_2 no sea pulsado por un tiempo >=5 seg
+  //BUCLE PRINCIPAL
+  //-----------------------------------------------------------------------------------------------
   while(1){
+    // Bucle Principal - Conteo Gaseosas
+    //  Programacion valor preseteado
+    // -----------------------------------------------------------------------------------------------
+
+    // Boton P1 por pooling/encuesta en la etapa de configuracion
+    calculate_digits(presettable_value);
+    if(is_low(PINC, P1_INCREMENT_PRESET)){ 
+        _delay_ms(DEBOUNCE_DELAY);  // esperar para evitar el rebote
+        if(is_low(PINC, P1_INCREMENT_PRESET) && last_state_P1 == 0){ //si sigue abajo despues del delay y su estado anterior fue bajo pongo en alto
+          last_state_P1 = 1;
+          presettable_value++;
+          
+
+          // si llega a 1000 que reinicie en 0
+          if(presettable_value>=1000){
+            presettable_value= 0;
+          }
+        }
+    }else { // restablecer el estado cuando el boton no se esta presionando
+        last_state_P1 = 0;  
+    }
+
+
+ 
+    /* calculate_digits(aux_numer); */
+
     /* PORTB = unit; 
     sbi(PORTD, TRANSISTOR_UNIT);
     _delay_ms(500);
@@ -367,9 +488,9 @@ int main(void){
     sbi(PORTD, TRANSISTOR_HUNDREDS);
     _delay_ms(500);
     cbi(PORTD, TRANSISTOR_HUNDREDS); */
-    show_display(aux_numer);
+    
 
-    /* while(1){ //ba P2_flag
+    /* while(P2_flag){ //va P2_flag
       show_display(aux_numer);
     }; */
   }
