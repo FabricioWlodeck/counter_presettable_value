@@ -45,13 +45,22 @@ volatile uint8_t P2_flag = 0;
 volatile uint8_t DT_flag = 0;
 
 volatile uint8_t P2_debounce = 0; // este flag me permitira saber si tengo que calcular el antirrebote para P2
+
+// esto por ahora no lo ocupo
 volatile uint8_t display_delay_unit = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
 volatile uint8_t display_delay_tens = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
 volatile uint8_t display_delay_hundreds = 0; // este flag me permitira saber si tengo que generar 10ms de encendido para los displays
 
+volatile uint8_t show_displays = 0; 
+volatile uint8_t show_display_unit = 0; 
+volatile uint8_t show_display_tens = 0; 
+volatile uint8_t show_display_hundreds = 0;
+
+volatile uint8_t mux_state = 0;
+
 volatile uint8_t timer_P2 = 0; //variable para contabilizar el tiempo de antirrebote de P2
 volatile uint8_t timer_delay_displays = 0; //variable para contabilizar el tiempo de encendido de los displays
-
+volatile uint8_t delay_display_flag = 0; // si tengo que contabilizar delay o no
 
 
 volatile uint8_t last_state_P1 = 0;
@@ -89,10 +98,10 @@ void startupSequence(){
   PORTD = 0b00000000; //pongo todo en 0 primero por si acaso
 
 
-  PORTB = 0b00000001; //para el deco
+  PORTB = 0b00001000; //pruebo todo los segmentos escribiendo un 8
   PORTD = 0b11110000; //para los transistores de los displays
   _delay_ms(500);
-  PORTB = 0b00000001; //para el deco
+  PORTB = 0b00001000; //pruebo todo los segmentos escribiendo un 8
   PORTD = 0b00000000; //para los transistores de los displays
   _delay_ms(500);
 };
@@ -122,54 +131,136 @@ void timer1_config(){
     TCNT1 = VPC1_2MS;
 };
 
-void calculate_digits(uint8_t drinks_number){
+void calculate_digits(uint16_t drinks_number){
   if(drinks_number<10){
     //solo LSB display
     unit = drinks_number;
-    display_delay_unit = 1;
+    /* unit = 6; */
 
-  } else if(drinks_number<100){
-    // 2 displays, unidad y decena
-    unit = drinks_number % 10;
-    tens = drinks_number / 10;
+  } else{
+    if(drinks_number<100){
+      // 2 displays, unidad y decena
+      unit = drinks_number % 10;
+      tens = drinks_number / 10;
+      
+      /* unit = 6;
+      tens = 3; */
+    }else{
+      if (drinks_number<1000){
+        // 3 displays, unidad, decena y centena
+        unit = drinks_number % 10;
+        tens = (drinks_number / 10) % 10;
+        hundreds = (drinks_number / 100) % 10;
 
+        /* unit = 6;
+        tens = 3;
+        hundreds = 5; */
 
-  } else if (drinks_number<1000){
-    // 3 displays, unidad, decena y centena
-    unit = drinks_number % 10;
-    tens = (drinks_number / 10) % 10;
-    hundreds = (drinks_number / 100) % 10;
+      }else{
+        unit = 0;
+        tens = 0;
+        hundreds = 0;
+      }
+    }
+  
   }
 };
 
-void show_display(){
-  PORTB = 0b00000001; //para el deco
+// Podria hacer 3 funciones para prender y apagar los displays para resumir mas el codigo y que sea mas legible
+void switch_display_unit(){
+  
+  /* PORTB = unit; 
+  sbi(PORTD, TRANSISTOR_UNIT);
+  
+  if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+    cbi(PORTD, TRANSISTOR_UNIT);
+    show_displays = 1;
+  }
+  */
+};
+
+void show_display(uint8_t drinks_number){
+  // codigo auxiliar
+  // -----------------------------------------------------------------------------------------------
+  /* PORTB = 0b00000001; //para el deco
   PORTD = 0b11110000; //para los transistores de los displays
   _delay_ms(250);
   PORTB = 0b00000001; //para el deco
   PORTD = 0b00000000; //para los transistores de los displays
-  _delay_ms(250);
+  _delay_ms(250); */
 
+  // CODIGO PERMANENTE
+  // -----------------------------------------------------------------------------------------------
 
-  /* if(drinks_number<10){
-    //solo LSB display
-    unit = drinks_number;
-    display_delay_unit = 1;
+  // Apagamos TODOS para ser seguros y evitar errores.
+  /* PORTD &= (~(0 << TRANSISTOR_UNIT) | ~(0 << TRANSISTOR_TENS) | ~(0 << TRANSISTOR_HUNDREDS)); */
+
+  if(drinks_number<10){
+    // prendo solo display de unidad
+    PORTB = unit; 
+    sbi(PORTD, TRANSISTOR_UNIT);
+    /* delay_display_flag = 1; */  // veremos si puedo ocupar
+    
+    if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+      cbi(PORTD, TRANSISTOR_UNIT);
+      show_displays = 1;
+    }
 
   } else if(drinks_number<100){
     // 2 displays, unidad y decena
-    unit = drinks_number % 10;
-    tens = drinks_number / 10;
+    // prendo display unidad y decena
 
+    //prendo y apagado unidad
+    PORTB = unit; 
+    sbi(PORTD, TRANSISTOR_UNIT);
+    delay_display_flag = 1;
+    if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+      cbi(PORTD, TRANSISTOR_UNIT);
+      show_displays = 1;
+    }
+    
+    //prendo y apagado decena
+    PORTB = tens; 
+    sbi(PORTD, TRANSISTOR_TENS);
+    delay_display_flag = 1;
+    if(is_high(PORTD, TRANSISTOR_TENS) && !show_displays){
+      cbi(PORTD, TRANSISTOR_TENS);
+      show_displays = 1;
+    }
 
   } else if (drinks_number<1000){
-    // 3 displays, unidad, decena y centena
-    unit = drinks_number % 10;
-    tens = (drinks_number / 10) % 10;
-    hundreds = (drinks_number / 100) % 10;
-  } */
+    //Prendo 3 displays, unidad, decena y centena
+
+    //prendo y apagado unidad
+    PORTB = unit; 
+    sbi(PORTD, TRANSISTOR_UNIT);
+    delay_display_flag = 1;
+    if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
+      cbi(PORTD, TRANSISTOR_UNIT);
+      show_displays = 1;
+    }
+    
+    //prendo y apagado decena
+    PORTB = tens; 
+    sbi(PORTD, TRANSISTOR_TENS);
+    delay_display_flag = 1;
+    if(is_high(PORTD, TRANSISTOR_TENS) && !show_displays){
+      cbi(PORTD, TRANSISTOR_TENS);
+      show_displays = 1;
+    }
+
+    //prendo y apagado centena
+    PORTB = hundreds; 
+    sbi(PORTD, TRANSISTOR_HUNDREDS);
+    delay_display_flag = 1;
+    if(is_high(PORTD, TRANSISTOR_HUNDREDS) && !show_displays){
+      cbi(PORTD, TRANSISTOR_HUNDREDS);
+      show_displays = 1;
+    }
+  }
 };
 
+//Con este TIMER0 CTC manejo P2
 ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (interrumpe cada 1 ms).
 	if(P2_debounce){								// si hubo flanco bajo en P2
 		timer_P2++;										// contador ++ para tiempo antirrebote
@@ -187,42 +278,30 @@ ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (int
 	}
 }
 
+//Con este TIMER1 Free-running (NORMAL) manejo multiplexacion de displays
 ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto es c/2ms).
   TCNT1 = VPC1_2MS; //	Cada vez que interrumpe, precarga el contador del Timer1.
-
-  if(display_delay_unit){				
-		PORTB = unit; // prendo la unidad en el deco
-		sbi(PORTD, TRANSISTOR_UNIT); //activo el transistor unidad
-		timer_delay_displays++;										// contador ++ para tiempo antirrebote
-    if (timer_delay_displays == 5){	// si contador = 5 (5 x 2ms = 10ms)
-		  cbi(PORTD, TRANSISTOR_UNIT); // apago la unidad
-      timer_delay_displays = 0;			//reseteo el tiempo de conteo	
-      display_delay_unit=0; // Ahora al estar en 0 cuando evalue esta variable deberia apagar el display
-    }
-	}
-
-  if(display_delay_tens){		
-    PORTB = tens; // prendo la unidad en el deco
-    sbi(PORTD, TRANSISTOR_TENS); //activo el transistor unidad				
-    timer_delay_displays++;										// contador ++ para tiempo antirrebote
-    if (timer_delay_displays == 5){	// si contador = 5 (5 x 2ms = 10ms)
-      cbi(PORTD, TRANSISTOR_TENS); // apago la unidad
-      timer_delay_displays = 0;				//	Como se alcanz� el tiempo programado, borra el contador del Timer 0.
-      display_delay_tens=0; // Ahora al estar en 0 cuando evalue esta variable deberia apagar el display
-    }
+  // PASO 1: Controlar el tiempo de encendido del display actual
+  timer_delay_displays++; 
+  // Solo un display está activo en este momento. Cuando se alcanza el tiempo:
+  if (timer_delay_displays >= 5) { 
+    show_displays = 0;
+    timer_delay_displays = 0;
+    delay_display_flag = 0; // significa que si no tengo que mostrar mas nada ni siquiera se moleste de ir contando cada 2ms
   }
 
-  if(display_delay_hundreds){	
-    PORTB = hundreds; // prendo la unidad en el deco
-    sbi(PORTD, TRANSISTOR_HUNDREDS); //activo el transistor unidad									
-    timer_delay_displays++;										// contador ++ para tiempo antirrebote
-    if (timer_delay_displays == 5){	// si contador = 5 (5 x 2ms = 10ms)
-      cbi(PORTD, TRANSISTOR_HUNDREDS); // apago la unidad
-      timer_delay_displays = 0;				//	Como se alcanz� el tiempo programado, borra el contador del Timer 0.
-      display_delay_hundreds=0; // Ahora al estar en 0 cuando evalue esta variable deberia apagar el display
+
+  /* if(delay_display_flag){
+      // PASO 1: Controlar el tiempo de encendido del display actual
+    timer_delay_displays++; 
+    // Solo un display está activo en este momento. Cuando se alcanza el tiempo:
+    if (timer_delay_displays >= 5) { 
+      show_displays = 0;
+      timer_delay_displays = 0;
+      delay_display_flag = 0; // significa que si no tengo que mostrar mas nada ni siquiera se moleste de ir contando cada 2ms
     }
-  }
-    // SECUENCIA TERMINADA !!!!!!1
+  } */
+
 }				
 
 // Interrupcion externa para P2
@@ -236,6 +315,11 @@ ISR(INT0_vect) {
     timer_P2=0;
   }
 }
+
+
+
+volatile uint16_t aux_numer = 536;
+
 
 int main(void){
   timer0_config();
@@ -262,14 +346,31 @@ int main(void){
 
  */
 
-  // Bucle Principal - Conteo
+  // Bucle Principal - Conteo Gaseosas
   // -----------------------------------------------------------------------------------------------
+  
+  calculate_digits(aux_numer);
 
   // Mientras el pulsador_2 no sea pulsado por un tiempo >=5 seg
   while(1){
-    while(P2_flag){
-      calculate_digits(0)
-      show_display();
-    };
+    /* PORTB = unit; 
+    sbi(PORTD, TRANSISTOR_UNIT);
+    _delay_ms(500);
+    cbi(PORTD, TRANSISTOR_UNIT);
+
+    PORTB = tens; 
+    sbi(PORTD, TRANSISTOR_TENS);
+    _delay_ms(500);
+    cbi(PORTD, TRANSISTOR_TENS);
+    
+    PORTB = hundreds; 
+    sbi(PORTD, TRANSISTOR_HUNDREDS);
+    _delay_ms(500);
+    cbi(PORTD, TRANSISTOR_HUNDREDS); */
+    show_display(aux_numer);
+
+    /* while(1){ //ba P2_flag
+      show_display(aux_numer);
+    }; */
   }
 };

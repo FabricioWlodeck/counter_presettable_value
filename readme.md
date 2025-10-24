@@ -6,7 +6,7 @@
     - [ ] P1 por pooling
     - [ ] Display con timer Free-running
     - [x] P2 con interrupcion INT-N
-    - [ ] P2 timer CTC Timer/Counter 0 de 8 bits
+    - [x] P2 timer CTC Timer/Counter 0 de 8 bits
 - [ ] Programar bucle principal con el contador DP.
 
 ### Secundarias:
