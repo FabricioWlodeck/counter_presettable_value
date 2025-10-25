@@ -11,4 +11,4 @@
 
 ### Secundarias:
 - [ ] Readme descriptivo.
-- [ ] refactorizar y hacer mas legible el codigo.
+- [~] refactorizar y hacer mas legible el codigo.
