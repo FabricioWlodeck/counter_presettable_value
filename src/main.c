@@ -49,6 +49,8 @@ volatile uint8_t DT_flag = 0;
 volatile uint8_t P2_debounce = 0; // este flag me permitira saber si tengo que calcular el antirrebote para P2
 volatile uint8_t P2_off_flag = 0; // flag para saber si apagar a los 5seg
 volatile uint8_t DP_permition = 1; // flag que me permite controlar cuando se puede aumentar las gaseosas con DP
+volatile uint16_t number_toShow = 0; // flag que me permite controlar cuando se puede aumentar las gaseosas con DP
+
 
 
 // esto por ahora no lo ocupo
@@ -143,9 +145,14 @@ void timer1_config(){
 };
 
 void calculate_digits(uint16_t drinks_number){
+  number_toShow = drinks_number;
   if(drinks_number<10){
     //solo LSB display
     unit = drinks_number;
+
+    //probar esto:
+    tens = 0;
+    hundreds = 0;
     /* unit = 6; */
 
   } else{
@@ -174,19 +181,6 @@ void calculate_digits(uint16_t drinks_number){
       }
     }
   }
-};
-
-// Podria hacer 3 funciones para prender y apagar los displays para resumir mas el codigo y que sea mas legible
-void switch_display_unit(){
-  
-  /* PORTB = unit; 
-  sbi(PORTD, TRANSISTOR_UNIT);
-  
-  if(is_high(PORTD, TRANSISTOR_UNIT) && !show_displays){
-    cbi(PORTD, TRANSISTOR_UNIT);
-    show_displays = 1;
-  }
-  */
 };
 
 void show_display(uint8_t drinks_number){
@@ -348,7 +342,7 @@ ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (int
 	}
   if(P2_off_flag){
     timer_P2_off++;
-    if (timer_P2_off == 2000){ 								// si contador = 10 (10ms)
+    if (timer_P2_off == 5000){ 								// si contador = 10 (10ms)
 			if (is_low(PIND, P2_ENTER_RESTART)){ //si esta presionado P2 despues de 10ms...
         if(P2_flag){ // si estaba prendido y lo apago reseteo el valor preseteable
           P2_flag = 0;
@@ -383,10 +377,10 @@ ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto 
   } */
 
   TCNT1 = VPC1_2MS; 
-  uint16_t drinks_number =  presettable_value;
+  uint16_t drinks_number =  number_toShow;
 
   mux_counter++;
-  if (mux_counter >= 20) { //40ms
+  if (mux_counter >= 2) { //40ms
     
       PORTD &= ~(_BV(TRANSISTOR_UNIT) | _BV(TRANSISTOR_TENS) | _BV(TRANSISTOR_HUNDREDS));
 
@@ -405,7 +399,6 @@ ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto 
   switch (mux_state) {
       case 0: // UNIDAD (LSB)
           PORTB = unit; 
-
           sbi(PORTD, TRANSISTOR_UNIT); // Activa el transistor unidad
           cbi(PORTD, TRANSISTOR_TENS); // desactiva el decena
           cbi(PORTD, TRANSISTOR_HUNDREDS); // desactiva el centena
@@ -472,46 +465,32 @@ int main(void){
     // Bucle Principal - Conteo Gaseosas
     //  Programacion valor preseteado
     // -----------------------------------------------------------------------------------------------
+    if(P2_flag == 0){
+      // ===========================================
+      //  MODO CONFIGURACIÓN (Muestra presettable_value)
+      // ===========================================
+      // Boton P1 por pooling/encuesta en la etapa de configuracion
+      calculate_digits(presettable_value);
+      if(is_low(PINC, P1_INCREMENT_PRESET)){ 
+          _delay_ms(DEBOUNCE_DELAY);  // esperar para evitar el rebote
+          if(is_low(PINC, P1_INCREMENT_PRESET) && last_state_P1 == 0){ //si sigue abajo despues del delay y su estado anterior fue bajo pongo en alto
+            last_state_P1 = 1;
+            presettable_value++;
+            
 
-    // Boton P1 por pooling/encuesta en la etapa de configuracion
-    calculate_digits(presettable_value);
-    if(is_low(PINC, P1_INCREMENT_PRESET)){ 
-        _delay_ms(DEBOUNCE_DELAY);  // esperar para evitar el rebote
-        if(is_low(PINC, P1_INCREMENT_PRESET) && last_state_P1 == 0){ //si sigue abajo despues del delay y su estado anterior fue bajo pongo en alto
-          last_state_P1 = 1;
-          presettable_value++;
-          
-
-          // si llega a 1000 que reinicie en 0
-          if(presettable_value>=1000){
-            presettable_value= 0;
+            // si llega a 1000 que reinicie en 0
+            if(presettable_value>=1000){
+              presettable_value= 0;
+            }
           }
-        }
-    }else { // restablecer el estado cuando el boton no se esta presionando
-        last_state_P1 = 0;  
-    }
-
-
- 
-    /* calculate_digits(aux_numer); */
-
-    /* PORTB = unit; 
-    sbi(PORTD, TRANSISTOR_UNIT);
-    _delay_ms(500);
-    cbi(PORTD, TRANSISTOR_UNIT);
-
-    PORTB = tens; 
-    sbi(PORTD, TRANSISTOR_TENS);
-    _delay_ms(500);
-    cbi(PORTD, TRANSISTOR_TENS);
-    
-    PORTB = hundreds; 
-    sbi(PORTD, TRANSISTOR_HUNDREDS);
-    _delay_ms(500);
-    cbi(PORTD, TRANSISTOR_HUNDREDS); */
-    
-
-    while(P2_flag){ // si esta prendido el modo DP o conteo de gaseosas ejecuto esto
+          calculate_digits(presettable_value);
+      }else { // restablecer el estado cuando el boton no se esta presionando
+          last_state_P1 = 0;  
+      }
+    } else{
+      // ===========================================
+      // B. MODO CONTEO (Muestra DP_value)
+      // ===========================================
       calculate_digits(DP_value);
       if(is_low(PINC, DT_DRINK) ){ 
           _delay_ms(DEBOUNCE_DELAY);  // esperar para evitar el rebote
@@ -537,7 +516,6 @@ int main(void){
         DP_permition= 1;
         DP_value = 0;
       }
-
-    };
+    }
   }
 };
