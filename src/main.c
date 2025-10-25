@@ -183,6 +183,7 @@ void calculate_digits(uint16_t drinks_number){
   }
 };
 
+//funcion que al final no ocupe, borrar despues
 void show_display(uint8_t drinks_number){
   // codigo auxiliar
   // -----------------------------------------------------------------------------------------------
@@ -364,18 +365,6 @@ ISR (TIMER0_COMPA_vect){								// RSI por comparacion del Timer0 con OCR0A (int
 
 //Con este TIMER1 Free-running (NORMAL) manejo multiplexacion de displays
 ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto es c/2ms).
-  /* TCNT1 = VPC1_2MS; //	Cada vez que interrumpe, precarga el contador del Timer1.
-  // PASO 1: Controlar el tiempo de encendido del display actual
-  if(is_high(PORTD, TRANSISTOR_UNIT) || is_high(PORTD, TRANSISTOR_TENS) || is_high(PORTD, TRANSISTOR_HUNDREDS)){
-    timer_delay_displays++; 
-    // Solo un display está activo en este momento. Cuando se alcanza el tiempo:
-    if (timer_delay_displays >= 10 ) { // esto me dara un tiempo de 20ms
-      show_displays = 0;
-      timer_delay_displays = 0;
-      delay_display_flag = 0; // significa que si no tengo que mostrar mas nada ni siquiera se moleste de ir contando cada 2ms
-    }
-  } */
-
   TCNT1 = VPC1_2MS; 
   uint16_t drinks_number =  number_toShow;
 
@@ -434,7 +423,6 @@ ISR (TIMER1_OVF_vect){//	RSI p/desbordam. del Timer1 (cuando llega a 0xFF, esto 
 
 }				
 
-
 // Interrupcion externa para P2
 ISR(INT0_vect) {                       
   // Rutina de interrupción externa INT0 para P2
@@ -450,6 +438,9 @@ ISR(INT0_vect) {
   }
 }
 
+
+// PROGRAMA PRINCIPAL
+//-----------------------------------------------------------------------------------------------
 int main(void){
   // INICIALIZACION
   //-----------------------------------------------------------------------------------------------
