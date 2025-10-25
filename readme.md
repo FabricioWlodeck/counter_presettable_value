@@ -1,7 +1,7 @@
 # Actividad integradora 2 - Experiencia 1 
 ## To Do List
 ### Principales:
-- [ ] Programar la carga de valor de preset y mostrarlo en el display (opcional).
+- [x] Programar la carga de valor de preset y mostrarlo en el display .
     - [x] DP por pooling
     - [x] P1 por pooling
     - [x] Display con timer Free-running
